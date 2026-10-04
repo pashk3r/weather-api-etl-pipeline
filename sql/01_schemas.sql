@@ -1,6 +1,9 @@
+-- Silver-слой хранит очищенные почасовые данные 
+-- Gold-слой хранит данные для аналитики
 CREATE SCHEMA IF NOT EXISTS silver;
 CREATE SCHEMA IF NOT EXISTS gold;
 
+-- Таблица в Silver-слое для хранения почасовых наблюдений за погодой в городах
 CREATE TABLE IF NOT EXISTS silver.weather_observations (
     city_id INTEGER NOT NULL,
     city_name TEXT NOT NULL,
@@ -19,6 +22,7 @@ CREATE TABLE IF NOT EXISTS silver.weather_observations (
     PRIMARY KEY (city_id, observation_time)
 );
 
+-- Таблица в Gold-слое для хранения агрегированных данных о погоде по дням
 CREATE TABLE IF NOT EXISTS gold.daily_weather_summary (
     date DATE NOT NULL,
     city_id INTEGER NOT NULL,
