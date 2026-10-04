@@ -86,3 +86,174 @@ weather-api-etl-pipeline/
 ```
 
 
+## Как запустить?
+
+
+### 1. Скачать проект
+
+```powershell
+git clone https://github.com/pashk3r/weather-api-etl-pipeline.git
+cd weather-api-etl-pipeline
+```
+
+### 2. Настроить переменные окружения
+
+Создайте `.env` из шаблона:
+
+```bash
+cp .env.example .env
+```
+
+Нужно заполнить переменные. Значения в угловых скобках надо заменить своими:
+
+```dotenv
+POSTGRES_AIRFLOW_USER=airflow
+POSTGRES_AIRFLOW_PASSWORD=<пароль_базы_airflow>
+POSTGRES_AIRFLOW_DB=airflow
+
+POSTGRES_DWH_USER=weather
+POSTGRES_DWH_PASSWORD=<пароль_базы_погоды>
+POSTGRES_DWH_DB=weather_dwh
+
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin
+
+AIRFLOW_ADMIN_USER=airflow
+AIRFLOW_JWT_SECRET=<случайный_секрет_airflow>
+
+SUPERSET_SECRET_KEY=<случайный_секрет_superset>
+```
+
+Для генерации случайного пароля или секрета выполни:
+
+```powershell
+$secretBytes = New-Object byte[] 48
+$generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$generator.GetBytes($secretBytes)
+[BitConverter]::ToString($secretBytes).Replace("-", "")
+```
+
+Для каждого пароля и секрета используй отдельное сгенерированное значение. Полученные строки не требуют URL-кодирования в строках подключения PostgreSQL.
+
+Сохрани `.env`. Не публикуй файл и не добавляй его в Git.
+
+> При повторном запуске используй прежние значения `.env`. Изменение пароля в файле не меняет пароль внутри уже созданной базы PostgreSQL. Секрет Superset также необходим для расшифровки сохранённых подключений.
+
+### 3. Запуск контейнеров
+
+```powershell
+docker compose up --build -d
+```
+
+### 4. Airflow
+
+Чтобы открыть Airflow переходим в браузер по ссылке https://localhost:8080.
+
+Airflow доступен без пароля с правами администратора. 
+
+Найди DAG `weather_etl_pipeline` и убедитесь, что он включён.
+
+
+
+### 5. Проверить исходные данные в MinIO
+
+Чтобы открыть MinIO: https://localhost:9001
+
+Используй логин и пароль из `.env`:
+- логин - `MINIO_ROOT_USER`;
+- пароль - `MINIO_ROOT_PASSWORD`.
+
+После успешного запуска в бакете `weather` появятся JSON-файлы:
+
+```text
+weather-forecast/bronze/year=YYYY/month=MM/day=DD/<city>.json
+```
+
+### 6. Подключить данные к Superset
+
+Superset - http://localhost:8088
+
+При первой установке используются:
+
+```text
+Логин: admin
+Пароль: admin
+```
+
+Выберите **+ → Data → Connect database → PostgreSQL** и заполни форму:
+
+| Поле | Значение |
+|---|---|
+| Host | `dwh` |
+| Port | `5432` |
+| Database name | Значение `POSTGRES_DWH_DB` из `.env` |
+| Username | Значение `POSTGRES_DWH_USER` |
+| Password | Значение `POSTGRES_DWH_PASSWORD` |
+| Display Name | `weather_dwh` |
+| Additional Parameters | Оставить пустым |
+| SSL | Выключить для текущего локального PostgreSQL |
+
+Нажать на **Connect**.
+
+Superset подключается к PostgreSQL внутри Docker-сети по адресу `dwh:5432`. Для подключения из программы на компьютере, например DBeaver, используй `localhost:5433`.
+
+После подключения нажмите **Create dataset** и выбери:
+
+```text
+Database: weather_dwh
+Schema: gold
+Table: daily_weather_summary
+```
+
+Для работы с почасовыми данными аналогично добавь:
+
+```text
+Database: weather_dwh
+Schema: silver
+Table: weather_observations
+```
+
+Подключение и датасеты сохраняются между перезапусками контейнеров.
+
+### 7. Проверить результат загрузки
+
+В Superset открой **SQL -> SQL Lab**, выбери `weather_dwh` и выполни:
+
+```sql
+SELECT
+    date,
+    city_name,
+    observation_count,
+    avg_temperature,
+    total_precipitation
+FROM gold.daily_weather_summary
+ORDER BY date DESC, city_name;
+```
+
+
+### Остановка и повторный запуск
+
+Остановить проект с сохранением данных:
+
+```powershell
+docker compose stop
+```
+
+Запустить повторно:
+
+```powershell
+docker compose up -d
+```
+
+Пересобрать после изменения Dockerfile или зависимостей:
+
+```powershell
+docker compose up --build -d
+```
+
+> Не выполняйте `docker compose down -v`, если хотите сохранить данные. Эта команда удаляет тома с базами PostgreSQL, файлами MinIO и настройками Superset.
+
+
+## **Автор**
+
+**[pashk3r](https://github.com/pashk3r)**
