@@ -48,11 +48,11 @@ Gold содержит среднюю, минимальную и максимал
 ## Используемые технологии
 
 - Python 3.12 
-- Apache Airflow 3.3.2 
+- pandas, requests, psycopg, minio 
 - MinIO 
 - PostgreSQL 17.6 
+- Apache Airflow 3.3.2 
 - Apache Superset 6.0.0 
-- pandas, requests, psycopg, minio 
 - Docker Compose 
 
 ## Структура проекта
@@ -84,6 +84,5 @@ weather-api-etl-pipeline/
 ├── requirements.txt
 └── README.md
 ```
-
 
 
