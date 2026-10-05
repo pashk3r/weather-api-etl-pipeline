@@ -1,0 +1,85 @@
+x-airflow-common: &airflow-common
+  build: {context: ., dockerfile: docker/airflow/Dockerfile}
+  environment:
+    PYTHONPATH: /opt/airflow
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set AIRFLOW_JWT_SECRET in .env}
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@airflow-db:5432/${POSTGRES_AIRFLOW_DB}"
+    DWH_DSN: "postgresql://${POSTGRES_DWH_USER}:${POSTGRES_DWH_PASSWORD}@dwh:5432/${POSTGRES_DWH_DB}"
+    MINIO_ENDPOINT: minio:9000
+    MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+    MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./src:/opt/airflow/src
+    - airflow-logs:/opt/airflow/logs
+
+services:
+  airflow-db:
+    image: postgres:17.6
+    environment:
+      POSTGRES_USER: ${POSTGRES_AIRFLOW_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_AIRFLOW_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_AIRFLOW_DB}
+    volumes: [airflow-db-data:/var/lib/postgresql/data]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AIRFLOW_USER} -d ${POSTGRES_AIRFLOW_DB}"], interval: 10s, timeout: 5s, retries: 5}
+
+  dwh:
+    image: postgres:17.6
+    environment:
+      POSTGRES_USER: ${POSTGRES_DWH_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_DWH_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DWH_DB}
+    ports: ["5433:5432"]
+    volumes: [dwh-data:/var/lib/postgresql/data, ./sql/01_schemas.sql:/docker-entrypoint-initdb.d/01_schemas.sql:ro]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_DWH_USER} -d ${POSTGRES_DWH_DB}"], interval: 10s, timeout: 5s, retries: 5}
+
+  minio:
+    image: ghcr.io/coollabsio/minio@sha256:69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio-data:/data]
+    healthcheck: {test: ["CMD", "mc", "ready", "local"], interval: 15s, timeout: 5s, retries: 5}
+
+  airflow-init:
+    <<: *airflow-common
+    depends_on: {airflow-db: {condition: service_healthy}}
+    command: bash -c "airflow db migrate"
+
+  airflow-api-server:
+    <<: *airflow-common
+    depends_on: {airflow-init: {condition: service_completed_successfully}, dwh: {condition: service_healthy}, minio: {condition: service_healthy}}
+    ports: ["127.0.0.1:8080:8080"]
+    command: api-server
+    healthcheck: {test: ["CMD-SHELL", "curl --fail http://localhost:8080/api/v2/version"], interval: 20s, timeout: 10s, retries: 5}
+
+  airflow-scheduler:
+    <<: *airflow-common
+    depends_on: {airflow-init: {condition: service_completed_successfully}, dwh: {condition: service_healthy}, minio: {condition: service_healthy}}
+    command: scheduler
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    depends_on: {airflow-init: {condition: service_completed_successfully}}
+    command: dag-processor
+
+  superset:
+    build: {context: ., dockerfile: docker/superset/Dockerfile}
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+    depends_on: {dwh: {condition: service_healthy}}
+    ports: ["8088:8088"]
+    volumes: [superset-home:/app/superset_home]
+    command: /bin/sh -c "superset db upgrade && (superset fab create-admin --username admin --firstname Superset --lastname Admin --email admin@example.com --password admin || true) && superset init && gunicorn --bind 0.0.0.0:8088 --workers 2 --timeout 120 'superset.app:create_app()'"
+
+volumes:
+  airflow-db-data:
+  dwh-data:
+  minio-data:
+  airflow-logs:
+  superset-home:
