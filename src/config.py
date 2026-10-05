@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-
+# Класс для создания объекта города, который мы будем использовать в нашем пайплайне
 @dataclass(frozen=True)
 class City:
     id: int
@@ -20,3 +20,12 @@ CITIES = (
 )
 
 
+# Класс для хранения настроек пайплайна
+@dataclass(frozen=True)
+class Settings:
+    minio_endpoint: str = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    minio_access_key: str = os.environ["MINIO_ROOT_USER"]
+    minio_secret_key: str = os.environ["MINIO_ROOT_PASSWORD"]
+    dwh_dsn: str = os.environ["DWH_DSN"]
+    open_meteo_url: str = "https://api.open-meteo.com/v1/forecast"
+    minio_bucket: str = "weather"
