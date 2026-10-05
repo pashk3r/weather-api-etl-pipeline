@@ -22,7 +22,7 @@ Superset — SQL-запросы, графики и дашборды
 
 Один запуск обрабатывает одну календарную дату. При полном ответе API это 24 наблюдения на город: 144 строки Silver и 6 строк Gold.
 
-DAG `weather_etl_pipeline` запускается ежедневно в **01:00 по Минску**.
+DAG `weather_etl_pipeline` запускается ежедневно в **00:00 по Минску**.
 
 | Задача Airflow | Назначение |
 |---|---|
@@ -103,41 +103,6 @@ cd weather-api-etl-pipeline
 ```bash
 cp .env.example .env
 ```
-
-Нужно заполнить переменные. Значения в угловых скобках надо заменить своими:
-
-```dotenv
-POSTGRES_AIRFLOW_USER=airflow
-POSTGRES_AIRFLOW_PASSWORD=<пароль_базы_airflow>
-POSTGRES_AIRFLOW_DB=airflow
-
-POSTGRES_DWH_USER=weather
-POSTGRES_DWH_PASSWORD=<пароль_базы_погоды>
-POSTGRES_DWH_DB=weather_dwh
-
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=minioadmin
-
-AIRFLOW_ADMIN_USER=airflow
-AIRFLOW_JWT_SECRET=<случайный_секрет_airflow>
-
-SUPERSET_SECRET_KEY=<случайный_секрет_superset>
-```
-
-Для генерации случайного пароля или секрета выполни:
-
-```powershell
-$secretBytes = New-Object byte[] 48
-$generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$generator.GetBytes($secretBytes)
-[BitConverter]::ToString($secretBytes).Replace("-", "")
-```
-
-Для каждого пароля и секрета используй отдельное сгенерированное значение. Полученные строки не требуют URL-кодирования в строках подключения PostgreSQL.
-
-Сохрани `.env`. Не публикуй файл и не добавляй его в Git.
-
-> При повторном запуске используй прежние значения `.env`. Изменение пароля в файле не меняет пароль внутри уже созданной базы PostgreSQL. Секрет Superset также необходим для расшифровки сохранённых подключений.
 
 ### 3. Запуск контейнеров
 
